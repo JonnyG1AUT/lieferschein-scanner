@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Lieferschein‑Scanner</title>
+  <link rel="manifest" href="manifest.json">
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+  <style>
+    body { font-family:sans-serif; padding:1rem; max-width:500px; margin:auto; }
+    label, select, input, button { width:100%; margin:0.5rem 0; }
+    button { padding:0.6rem; font-size:1rem; }
+    img { max-width:100%; margin:0.5rem 0; }
+    table { width:100%; border-collapse:collapse; margin-top:1rem; }
+    th, td { border:1px solid #ccc; padding:0.3rem; }
+  </style>
+</head>
+<body>
+  <h1>Lieferschein‑Scanner</h1>
+  <label>Lieferant</label>
+  <select id="supplier">
+    <option>ERNST DERFESER GmbH</option>
+    <option>Bauwaren Canal GmbH & Co. KG</option>
+    <option>Würth-Hochenburger GmbH</option>
+  </select>
+  <label>Projektcode</label>
+  <input id="project" placeholder="z. B. delago">
+  <label>Foto auswählen</label>
+  <input type="file" id="fileInput" accept="image/*" capture="environment">
+  <button id="scanBtn">Scannen</button>
+  <div id="status"></div>
+  <img id="preview" hidden>
+  <div id="results"></div>
+  <script>
+    const pi = document.getElementById('fileInput'),
+          sb = document.getElementById('scanBtn'),
+          st = document.getElementById('status'),
+          pr = document.getElementById('preview'),
+          rs = document.getElementById('results');
+    let imgFile;
+    pi.onchange = e => {
+      imgFile = e.target.files[0];
+      pr.src = URL.createObjectURL(imgFile);
+      pr.hidden = false;
+    };
+    sb.onclick = async () => {
+      if (!imgFile) return alert('Foto wählen!');
+      st.textContent = 'OCR…';
+      const fr = new FileReader();
+      fr.onload = async () => {
+        const { data:{ lines } } = await Tesseract.recognize(fr.result,'deu');
+        st.textContent = '';
+        const txt = lines.map(l=>l.text.trim()).filter(l=>l);
+        display(txt);
+      };
+      fr.readAsDataURL(imgFile);
+    };
+    function display(lines){
+      const date   = lines.find(l=>/\b\d{1,2}\.\d{1,2}\.\d{2,4}\b/.test(l))||'';
+      const proj   = document.getElementById('project').value.trim();
+      const sup    = document.getElementById('supplier').value;
+      const itemRe = /(\d+[.,]?\d*)\s*(t|kg|m³|m2|qm|l|st|stk|stück)/i;
+      let html = '<table><tr><th>Datum</th><th>Projekt</th><th>Lieferant</th>'
+               +'<th>Bezeichnung</th><th>Menge</th><th>Einheit</th></tr>';
+      lines.forEach(l=>{
+        const m=l.match(itemRe);
+        if(!m) return;
+        const qty = parseFloat(m[1].replace(',','.')),
+              unit= m[2],
+              desc= l.slice(0,m.index).trim()||l;
+        html+=`<tr><td>${date}</td><td>${proj}</td><td>${sup}</td>`
+             +`<td>${desc}</td><td>${qty}</td><td>${unit}</td></tr>`;
+      });
+      rs.innerHTML = html+'</table>';
+    }
+  </script>
+</body>
+</html>
